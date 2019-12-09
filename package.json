@@ -9,6 +9,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "apollo-server": "^2.9.13"
+    "apollo-server": "^2.9.13",
+    "bcrypt": "^3.0.7",
+    "jsonwebtoken": "^8.5.1"
   }
 }

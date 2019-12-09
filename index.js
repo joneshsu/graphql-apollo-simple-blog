@@ -1,6 +1,12 @@
 'use strict';
 
 const { ApolloServer, gql } = require('apollo-server');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+
+const SALT_ROUNDS = 2;
+
+const SECRET = 'this_is_a_random_secret';
 
 const dummyUsers = [
   {
@@ -106,11 +112,18 @@ const typeDefs = gql`
     body: String
   }
   
+  input SignUpInput {
+    email: String!
+    password: String!
+    name: String!
+  }
+  
   type Mutation {
     updateMyInfo(input: UpdateMyInfoInput!): User
     addFriend(userId: ID!): User
     addPost(input: AddPostInput!): Post
     likePost(postId: ID!): Post   
+    signUp(input: SignUpInput!): User
   }
   
 `;
@@ -170,6 +183,27 @@ const addPost = (parent, { input } ) => {
   return dummyPosts[dummyPosts.length - 1];
 };
 
+const addUser = ({ name, email, password }) => (
+  dummyUsers[dummyUsers.length] = {
+    id: dummyUsers.length + 1,
+    name: name,
+    email: email,
+    password: password,
+    age: 0,
+    friendIds: []
+  }
+);
+
+const signUp = async (parent, { input }) => {
+  const { email, password, name } = input;
+  const user = dummyUsers.some(user => user.email === email);
+  if (user) throw new Error(`User Email Duplicate`);
+
+  const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+
+  return addUser({ name: name, email: email, password: hashedPassword });
+};
+
 const resolvers = {
   Query: {
     user: (root, args) => findUserByUserId(args.id),
@@ -181,7 +215,8 @@ const resolvers = {
     updateMyInfo: updateMyInfo,
     addFriend: addFriend,
     addPost: addPost,
-    likePost: likePost
+    likePost: likePost,
+    signUp: signUp
   },
   User: {
     friends: (parent) => filterUsersByUserIds(parent.friendIds),
