@@ -92,6 +92,8 @@ const typeDefs = gql`
   type Query {
     users: [User]
     user(id: ID!): User
+    posts: [Post]
+    post(id: ID!): Post
   } 
 `;
 
@@ -99,16 +101,24 @@ const filterUsersByUserIds = userIds => dummyUsers.filter(user => userIds.includ
 
 const findUserByUserId = userId => dummyUsers.find(user => user.id === Number(userId));
 
-const findPostsByUserId = userId => dummyPosts.filter(post => post.authorId !== userId);
+const findPostsByUserId = userId => dummyPosts.filter(post => post.authorId === userId);
+
+const findPostByPostId = postId => dummyPosts.find(post => post.id === Number(postId));
 
 const resolvers = {
   Query: {
     user: (root, args) => findUserByUserId(args.id),
-    users: () => dummyUsers
+    users: () => dummyUsers,
+    post: (root, args) => findPostByPostId(args.id),
+    posts: () => dummyPosts
   },
   User: {
     friends: (parent) => filterUsersByUserIds(parent.friendIds),
     posts: (parent) => findPostsByUserId(parent.id)
+  },
+  Post: {
+    author: (parent) => findUserByUserId(parent.authorId),
+    likeGivers: (parent) => filterUsersByUserIds(parent.likeGivers)
   }
 };
 
