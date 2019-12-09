@@ -95,7 +95,27 @@ const typeDefs = gql`
     posts: [Post]
     post(id: ID!): Post
   } 
+  
+  input UpdateMyInfoInput {
+    name: String
+    age: Int
+  }
+  
+  input AddPostInput {
+    title: String!
+    body: String
+  }
+  
+  type Mutation {
+    updateMyInfo(input: UpdateMyInfoInput!): User
+    addFriend(userId: ID!): User
+    addPost(input: AddPostInput!): Post
+    likePost(postId: ID!): Post   
+  }
+  
 `;
+
+const myId = 1;
 
 const filterUsersByUserIds = userIds => dummyUsers.filter(user => userIds.includes(user.id));
 
@@ -105,12 +125,63 @@ const findPostsByUserId = userId => dummyPosts.filter(post => post.authorId === 
 
 const findPostByPostId = postId => dummyPosts.find(post => post.id === Number(postId));
 
+const updateUserInfo = (userId, data) => Object.assign(findUserByUserId(userId), data);
+
+const updateMyInfo = (parent, { input }) => {
+  // filter null value
+  const data = ['name', 'age'].reduce((obj, key) => (input[key] ? { ...obj, [key]: input[key] } : obj), {});
+
+  return updateUserInfo(myId, data);
+};
+
+const addFriend = (parent, { userId }) => {
+  userId = Number(userId);
+  const user = findUserByUserId(myId);
+  if (!user.friendIds.includes(userId)) {
+    user.friendIds.push(userId);
+  } else {
+    user.friendIds = user.friendIds.filter(_userId => _userId !== userId);
+  }
+  return user;
+};
+
+const likePost = (parent, { postId }) => {
+  postId = Number(postId);
+  const post = findPostByPostId(postId);
+  if (!post.likeGivers.includes(myId)) {
+    post.likeGivers.push(myId);
+  } else {
+    post.likeGivers = post.likeGivers.filter(userId => userId !== myId);
+  }
+
+  return post;
+};
+
+const addPost = (parent, { input } ) => {
+  const { title, body } = input;
+  dummyPosts.push({
+    id: dummyPosts.length + 1,
+    authorId: myId,
+    title: title,
+    body: body || '',
+    likeGivers: [],
+    createdAt: new Date()
+  });
+  return dummyPosts[dummyPosts.length - 1];
+};
+
 const resolvers = {
   Query: {
     user: (root, args) => findUserByUserId(args.id),
     users: () => dummyUsers,
     post: (root, args) => findPostByPostId(args.id),
     posts: () => dummyPosts
+  },
+  Mutation: {
+    updateMyInfo: updateMyInfo,
+    addFriend: addFriend,
+    addPost: addPost,
+    likePost: likePost
   },
   User: {
     friends: (parent) => filterUsersByUserIds(parent.friendIds),
