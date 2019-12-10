@@ -139,6 +139,7 @@ const typeDefs = gql`
     updateMyInfo(input: UpdateMyInfoInput!): User
     addFriend(userId: ID!): User
     addPost(input: AddPostInput!): Post
+    deletePost(postId: ID!): Post
     likePost(postId: ID!): Post   
     signUp(input: SignUpInput!): User
     login(input: LoginInput!): Token
@@ -156,11 +157,27 @@ const findPostsByUserId = userId => dummyPosts.filter(post => post.authorId === 
 
 const findPostByPostId = postId => dummyPosts.find(post => post.id === Number(postId));
 
+const findPostIndex = postId => dummyPosts.findIndex(post => post.id === Number(postId));
+
+const deletePost = postId => (
+  dummyPosts.splice(findPostIndex(postId), 1)[0]
+);
+
+const isPostAuthor = resolverFunc => (parent, args, context) => {
+  const { postId } = args;
+  const { me } = context;
+  const post = findPostByPostId(postId);
+  if (!post) throw new Error(`Post Not Found`);
+
+  const isAuthor = post.authorId === me.id;
+  if (!isAuthor) throw new ForbiddenError(`Only Author Can Delete Post`);
+
+  return resolverFunc.apply(null, [parent, args, context]);
+};
+
 const updateUserInfo = (userId, data) => Object.assign(findUserByUserId(userId), data);
 
 const updateMyInfo = (parent, { input }, { me }) => {
-  if (!me) throw new Error(`Plz Login First`);
-
   // filter null value
   const data = ['name', 'age'].reduce((obj, key) => (input[key] ? { ...obj, [key]: input[key] } : obj), {});
 
@@ -168,8 +185,6 @@ const updateMyInfo = (parent, { input }, { me }) => {
 };
 
 const addFriend = (parent, { userId }, { me }) => {
-  if (!me) throw new Error(`Plz Login First`);
-
   userId = Number(userId);
   const user = findUserByUserId(me.id);
   if (!user.friendIds.includes(userId)) {
@@ -181,8 +196,6 @@ const addFriend = (parent, { userId }, { me }) => {
 };
 
 const likePost = (parent, { postId }, { me }) => {
-  if (!me) throw new Error(`Plz Login First`);
-
   postId = Number(postId);
   const post = findPostByPostId(postId);
   if (!post.likeGivers.includes(me.id)) {
@@ -195,8 +208,6 @@ const likePost = (parent, { postId }, { me }) => {
 };
 
 const addPost = (parent, { input }, { me }) => {
-  if (!me) throw new Error(`Plz Login First`);
-
   const { title, body } = input;
   dummyPosts.push({
     id: dummyPosts.length + 1,
@@ -267,6 +278,9 @@ const resolvers = {
     updateMyInfo: isAuthenticated((parent, args, { me }) => updateMyInfo(parent, args, { me })),
     addFriend: isAuthenticated((parent, args, { me }) => addFriend(parent, args, { me })),
     addPost: isAuthenticated((parent, args, { me }) => addPost(parent, args, { me })),
+    deletePost: isAuthenticated(
+      isPostAuthor((root, { postId }, { me }) => deletePost(postId))
+    ),
     likePost: isAuthenticated((parent, args, { me }) => likePost(parent, args, { me })),
     signUp: signUp,
     login: login
