@@ -56,7 +56,6 @@ const addPost = (me, entity) => {
 };
 
 module.exports = {
-  findPostIndex,
   findPostByPostId,
   findPostsByUserId,
   addPost,
