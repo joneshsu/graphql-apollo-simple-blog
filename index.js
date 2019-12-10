@@ -3,7 +3,8 @@
 const { ApolloServer, gql, ForbiddenError } = require('apollo-server');
 
 const {
-  userModel
+  userModel,
+  postModel
 } = require('./models');
 
 const bcrypt = require('bcrypt');
@@ -13,36 +14,6 @@ const SALT_ROUNDS = 2;
 
 const SECRET = 'this_is_a_random_secret';
 const EXPIRATION_TIME = '1h';
-
-const dummyUsers = [
-  {
-    id: 1,
-    email: 'jones.th.hsu+1@gmail.com',
-    // original password => !qaz2wSx, below is hashed password
-    password: '$2b$04$X4rAP.cV/awEAekwqnBRd.JOJgPRc0AzIVCN/RjXAy6OgiGoI5I/W',
-    name: 'Michael Jordan',
-    age: 56,
-    friendIds: [2, 3]
-  },
-  {
-    id: 2,
-    email: 'jones.th.hsu+2@gmail.com',
-    // !qaz2wsx
-    password: '$2b$04$X4rAP.cV/awEAekwqnBRd.JOJgPRc0AzIVCN/RjXAy6OgiGoI5I/W',
-    name: 'LeBron James',
-    age: 35,
-    friendIds: [1]
-  },
-  {
-    id: 3,
-    email: 'jones.th.hsu+3@gmail.com',
-    // !qaz2wsx
-    password: '$2b$04$X4rAP.cV/awEAekwqnBRd.JOJgPRc0AzIVCN/RjXAy6OgiGoI5I/W',
-    name: 'Kobe Bryant',
-    age: 41,
-    friendIds: [3]
-  }
-];
 
 const dummyPosts = [
   {
@@ -150,51 +121,16 @@ const typeDefs = gql`
   
 `;
 
-const findPostsByUserId = userId => dummyPosts.filter(post => post.authorId === userId);
-
-const findPostByPostId = postId => dummyPosts.find(post => post.id === Number(postId));
-
-const findPostIndex = postId => dummyPosts.findIndex(post => post.id === Number(postId));
-
-const deletePost = postId => (
-  dummyPosts.splice(findPostIndex(postId), 1)[0]
-);
-
 const isPostAuthor = resolverFunc => (parent, args, context) => {
   const { postId } = args;
-  const { me } = context;
-  const post = findPostByPostId(postId);
+  const { me, postModel } = context;
+  const post = postModel.findPostByPostId(postId);
   if (!post) throw new Error(`Post Not Found`);
 
   const isAuthor = post.authorId === me.id;
   if (!isAuthor) throw new ForbiddenError(`Only Author Can Delete Post`);
 
   return resolverFunc.apply(null, [parent, args, context]);
-};
-
-const likePost = (parent, { postId }, { me }) => {
-  postId = Number(postId);
-  const post = findPostByPostId(postId);
-  if (!post.likeGivers.includes(me.id)) {
-    post.likeGivers.push(me.id);
-  } else {
-    post.likeGivers = post.likeGivers.filter(userId => userId !== me.id);
-  }
-
-  return post;
-};
-
-const addPost = (parent, { input }, { me }) => {
-  const { title, body } = input;
-  dummyPosts.push({
-    id: dummyPosts.length + 1,
-    authorId: me.id,
-    title: title,
-    body: body || '',
-    likeGivers: [],
-    createdAt: new Date()
-  });
-  return dummyPosts[dummyPosts.length - 1];
 };
 
 const generateJWT = (user) => (
@@ -217,17 +153,17 @@ const resolvers = {
     me: isAuthenticated((root, args, { me, userModel }) => userModel.findUserByUserId(me.id)),
     user: (root, args, { userModel }) => userModel.findUserByUserId(Number(args.id)),
     users: (root, args, { userModel }) => userModel.getUsers(),
-    post: (root, args) => findPostByPostId(args.id),
-    posts: () => dummyPosts
+    post: (root, args, { postModel }) => postModel.findPostByPostId(Number(args.id)),
+    posts: (root, args, { postModel }) => postModel.getPosts()
   },
   Mutation: {
     updateMyInfo: isAuthenticated((parent, { input }, { me, userModel }) => userModel.updateMyInfo(me, input)),
     addFriend: isAuthenticated((parent, { userId }, { me, userModel }) => userModel.addFriend(me, Number(userId))),
-    addPost: isAuthenticated((parent, args, { me }) => addPost(parent, args, { me })),
+    addPost: isAuthenticated((parent, { input }, { me, postModel }) => postModel.addPost(me, input)),
     deletePost: isAuthenticated(
-      isPostAuthor((parent, { postId }, { me }) => deletePost(postId))
+      isPostAuthor((parent, { postId }, { postModel }) => postModel.deletePost(postId))
     ),
-    likePost: isAuthenticated((parent, args, { me }) => likePost(parent, args, { me })),
+    likePost: isAuthenticated((parent, { postId }, { me, postModel }) => postModel.likePost(me, Number(postId))),
     signUp: async (parent, { input }, { userModel }) => {
       const { email, password, name } = input;
       const user = userModel.findUserByEmail(email);
@@ -252,7 +188,8 @@ const resolvers = {
   User: {
     friends: (parent, args, { userModel }) =>
       userModel.filterUsersByUserIds(parent.friendIds),
-    posts: (parent) => findPostsByUserId(parent.id)
+    posts: (parent, args, { postModel }) =>
+      postModel.findPostsByUserId(parent.id)
   },
   Post: {
     author: (parent, args, { userModel }) => userModel.findUserByUserId(parent.authorId),
@@ -265,7 +202,8 @@ const server = new ApolloServer({
   resolvers,
   context: async({ req }) => {
     const context = {
-      userModel
+      userModel,
+      postModel
     };
     const token = req.headers['x-token'];
     if (token) {
