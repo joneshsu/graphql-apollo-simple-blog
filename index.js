@@ -7,7 +7,7 @@ const jwt = require('jsonwebtoken');
 const SALT_ROUNDS = 2;
 
 const SECRET = 'this_is_a_random_secret';
-const EXPIRATION_TIME = 60;
+const EXPIRATION_TIME = '1h';
 
 const dummyUsers = [
   {
@@ -107,6 +107,7 @@ const typeDefs = gql`
   Query
   """
   type Query {
+    me: User
     users: [User]
     user(id: ID!): User
     posts: [Post]
@@ -145,7 +146,10 @@ const typeDefs = gql`
   
 `;
 
-const myId = 1;
+const getMe = (root, args, { me }) => {
+  if (!me) throw new Error(`Plz Login First`);
+  return findUserByUserId(me.id);
+};
 
 const filterUsersByUserIds = userIds => dummyUsers.filter(user => userIds.includes(user.id));
 
@@ -159,16 +163,20 @@ const findPostByPostId = postId => dummyPosts.find(post => post.id === Number(po
 
 const updateUserInfo = (userId, data) => Object.assign(findUserByUserId(userId), data);
 
-const updateMyInfo = (parent, { input }) => {
+const updateMyInfo = (parent, { input }, { me }) => {
+  if (!me) throw new Error(`Plz Login First`);
+
   // filter null value
   const data = ['name', 'age'].reduce((obj, key) => (input[key] ? { ...obj, [key]: input[key] } : obj), {});
 
-  return updateUserInfo(myId, data);
+  return updateUserInfo(me.id, data);
 };
 
-const addFriend = (parent, { userId }) => {
+const addFriend = (parent, { userId }, { me }) => {
+  if (!me) throw new Error(`Plz Login First`);
+
   userId = Number(userId);
-  const user = findUserByUserId(myId);
+  const user = findUserByUserId(me.id);
   if (!user.friendIds.includes(userId)) {
     user.friendIds.push(userId);
   } else {
@@ -177,23 +185,27 @@ const addFriend = (parent, { userId }) => {
   return user;
 };
 
-const likePost = (parent, { postId }) => {
+const likePost = (parent, { postId }, { me }) => {
+  if (!me) throw new Error(`Plz Login First`);
+
   postId = Number(postId);
   const post = findPostByPostId(postId);
-  if (!post.likeGivers.includes(myId)) {
-    post.likeGivers.push(myId);
+  if (!post.likeGivers.includes(me.id)) {
+    post.likeGivers.push(me.id);
   } else {
-    post.likeGivers = post.likeGivers.filter(userId => userId !== myId);
+    post.likeGivers = post.likeGivers.filter(userId => userId !== me.id);
   }
 
   return post;
 };
 
-const addPost = (parent, { input } ) => {
+const addPost = (parent, { input }, { me }) => {
+  if (!me) throw new Error(`Plz Login First`);
+
   const { title, body } = input;
   dummyPosts.push({
     id: dummyPosts.length + 1,
-    authorId: myId,
+    authorId: me.id,
     title: title,
     body: body || '',
     likeGivers: [],
@@ -215,8 +227,10 @@ const addUser = ({ name, email, password }) => (
 
 const generateJWT = (user) => (
   jwt.sign({
-    userId: user.id,
-    userName: user.name
+    me: {
+      id: user.id,
+      name: user.name
+    }
   }, SECRET, { expiresIn: EXPIRATION_TIME })
 );
 
@@ -243,6 +257,7 @@ const login = async (parent, { input }) => {
 
 const resolvers = {
   Query: {
+    me: getMe,
     user: (root, args) => findUserByUserId(args.id),
     users: () => dummyUsers,
     post: (root, args) => findPostByPostId(args.id),
@@ -268,7 +283,20 @@ const resolvers = {
 
 const server = new ApolloServer({
   typeDefs,
-  resolvers
+  resolvers,
+  context: async({ req }) => {
+    const token = req.headers['x-token'];
+    if (token) {
+      try {
+        const { me } = await jwt.verify(token, SECRET);
+        return { me };
+      } catch (e) {
+        throw new Error(`Token Expired`);
+      }
+    }
+
+    return {};
+  }
 });
 
 server.listen().then(({ url }) => {
