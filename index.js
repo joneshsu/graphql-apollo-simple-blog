@@ -7,6 +7,8 @@ const {
   postModel
 } = require('./models');
 
+const { typeDefs, resolvers } = require('./schemas');
+
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
@@ -15,25 +17,7 @@ const SALT_ROUNDS = 2;
 const SECRET = 'this_is_a_random_secret';
 const EXPIRATION_TIME = '1h';
 
-const dummyPosts = [
-  {
-    id: 1,
-    authorId: 1,
-    title: 'Hello GraphQL',
-    body: 'This is the first post for GraphQL',
-    likeGivers: [],
-    createdAt: "2019-12-07T14:00:12.111Z"
-  },
-  {
-    id: 2,
-    authorId: 2,
-    title: 'Hello Nodejs',
-    body: 'The second post for Nodejs',
-    likeGivers: [1],
-    createdAt: "2019-12-08T13:12:48.124Z"
-  }
-];
-
+/*
 const typeDefs = gql`
   """
   User
@@ -120,6 +104,7 @@ const typeDefs = gql`
   }
   
 `;
+*/
 
 const isPostAuthor = resolverFunc => (parent, args, context) => {
   const { postId } = args;
@@ -147,7 +132,7 @@ const isAuthenticated = resolverFunc => (parent, args, context) => {
   if (!context.me) throw new ForbiddenError(`Please Login First`);
   return resolverFunc.apply(null, [parent, args, context])
 };
-
+/*
 const resolvers = {
   Query: {
     me: isAuthenticated((root, args, { me, userModel }) => userModel.findUserByUserId(me.id)),
@@ -196,6 +181,7 @@ const resolvers = {
     likeGivers: (parent, args, { userModel }) => userModel.filterUsersByUserIds(parent.likeGivers)
   }
 };
+*/
 
 const server = new ApolloServer({
   typeDefs,
