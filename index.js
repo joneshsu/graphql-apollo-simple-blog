@@ -1,6 +1,6 @@
 'use strict';
 
-const { ApolloServer, gql } = require('apollo-server');
+const { ApolloServer, gql, ForbiddenError } = require('apollo-server');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
@@ -146,11 +146,6 @@ const typeDefs = gql`
   
 `;
 
-const getMe = (root, args, { me }) => {
-  if (!me) throw new Error(`Plz Login First`);
-  return findUserByUserId(me.id);
-};
-
 const filterUsersByUserIds = userIds => dummyUsers.filter(user => userIds.includes(user.id));
 
 const findUserByUserId = userId => dummyUsers.find(user => user.id === Number(userId));
@@ -255,19 +250,24 @@ const login = async (parent, { input }) => {
   return { token: await generateJWT(user), expiredAt: Date.now() + (EXPIRATION_TIME * 1000) };
 };
 
+const isAuthenticated = resolverFunc => (parent, args, context) => {
+  if (!context.me) throw new ForbiddenError(`Please Login First`);
+  return resolverFunc.apply(null, [parent, args, context])
+};
+
 const resolvers = {
   Query: {
-    me: getMe,
+    me: isAuthenticated((parent, args, { me }) => findUserByUserId(me.id)),
     user: (root, args) => findUserByUserId(args.id),
     users: () => dummyUsers,
     post: (root, args) => findPostByPostId(args.id),
     posts: () => dummyPosts
   },
   Mutation: {
-    updateMyInfo: updateMyInfo,
-    addFriend: addFriend,
-    addPost: addPost,
-    likePost: likePost,
+    updateMyInfo: isAuthenticated((parent, args, { me }) => updateMyInfo(parent, args, { me })),
+    addFriend: isAuthenticated((parent, args, { me }) => addFriend(parent, args, { me })),
+    addPost: isAuthenticated((parent, args, { me }) => addPost(parent, args, { me })),
+    likePost: isAuthenticated((parent, args, { me }) => likePost(parent, args, { me })),
     signUp: signUp,
     login: login
   },
