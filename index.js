@@ -7,13 +7,14 @@ const jwt = require('jsonwebtoken');
 const SALT_ROUNDS = 2;
 
 const SECRET = 'this_is_a_random_secret';
+const EXPIRATION_TIME = 60;
 
 const dummyUsers = [
   {
     id: 1,
     email: 'jones.th.hsu+1@gmail.com',
-    // !qaz2wSx
-    password: 'bdaeff992dac4c49c697ef6673b9835a16bddc08ab15da761b41df8e19fc3a91',
+    // original password => !qaz2wSx, below is hashed password
+    password: '$2b$04$X4rAP.cV/awEAekwqnBRd.JOJgPRc0AzIVCN/RjXAy6OgiGoI5I/W',
     name: 'Michael Jordan',
     age: 56,
     friendIds: [2, 3]
@@ -22,7 +23,7 @@ const dummyUsers = [
     id: 2,
     email: 'jones.th.hsu+2@gmail.com',
     // !qaz2wsx
-    password: 'bdaeff992dac4c49c697ef6673b9835a16bddc08ab15da761b41df8e19fc3a91',
+    password: '$2b$04$X4rAP.cV/awEAekwqnBRd.JOJgPRc0AzIVCN/RjXAy6OgiGoI5I/W',
     name: 'LeBron James',
     age: 35,
     friendIds: [1]
@@ -31,7 +32,7 @@ const dummyUsers = [
     id: 3,
     email: 'jones.th.hsu+3@gmail.com',
     // !qaz2wsx
-    password: 'bdaeff992dac4c49c697ef6673b9835a16bddc08ab15da761b41df8e19fc3a91',
+    password: '$2b$04$X4rAP.cV/awEAekwqnBRd.JOJgPRc0AzIVCN/RjXAy6OgiGoI5I/W',
     name: 'Kobe Bryant',
     age: 41,
     friendIds: [3]
@@ -93,6 +94,16 @@ const typeDefs = gql`
   }
   
   """
+  JWT Token
+  """
+  type Token {
+    "Access token"
+    token: String
+    "Expiration time"
+    expiredAt: String
+  }
+  
+  """
   Query
   """
   type Query {
@@ -118,12 +129,18 @@ const typeDefs = gql`
     name: String!
   }
   
+  input LoginInput {
+    email: String!
+    password: String!
+  }
+  
   type Mutation {
     updateMyInfo(input: UpdateMyInfoInput!): User
     addFriend(userId: ID!): User
     addPost(input: AddPostInput!): Post
     likePost(postId: ID!): Post   
     signUp(input: SignUpInput!): User
+    login(input: LoginInput!): Token
   }
   
 `;
@@ -133,6 +150,8 @@ const myId = 1;
 const filterUsersByUserIds = userIds => dummyUsers.filter(user => userIds.includes(user.id));
 
 const findUserByUserId = userId => dummyUsers.find(user => user.id === Number(userId));
+
+const findUserByEmail = email => dummyUsers.find(user => user.email === email);
 
 const findPostsByUserId = userId => dummyPosts.filter(post => post.authorId === userId);
 
@@ -194,6 +213,13 @@ const addUser = ({ name, email, password }) => (
   }
 );
 
+const generateJWT = (user) => (
+  jwt.sign({
+    userId: user.id,
+    userName: user.name
+  }, SECRET, { expiresIn: EXPIRATION_TIME })
+);
+
 const signUp = async (parent, { input }) => {
   const { email, password, name } = input;
   const user = dummyUsers.some(user => user.email === email);
@@ -202,6 +228,17 @@ const signUp = async (parent, { input }) => {
   const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
   return addUser({ name: name, email: email, password: hashedPassword });
+};
+
+const login = async (parent, { input }) => {
+  const { email, password } = input;
+  const user = findUserByEmail(email);
+  if (!user) throw new Error(`User Not Found`);
+
+  const match = await bcrypt.compare(password, user.password);
+  if (!match) throw new Error(`User Password Incorrect`);
+
+  return { token: await generateJWT(user), expiredAt: Date.now() + (EXPIRATION_TIME * 1000) };
 };
 
 const resolvers = {
@@ -216,7 +253,8 @@ const resolvers = {
     addFriend: addFriend,
     addPost: addPost,
     likePost: likePost,
-    signUp: signUp
+    signUp: signUp,
+    login: login
   },
   User: {
     friends: (parent) => filterUsersByUserIds(parent.friendIds),
