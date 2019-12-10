@@ -1,6 +1,11 @@
 'use strict';
 
 const { ApolloServer, gql, ForbiddenError } = require('apollo-server');
+
+const {
+  userModel
+} = require('./models');
+
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
@@ -99,8 +104,6 @@ const typeDefs = gql`
   type Token {
     "Access token"
     token: String
-    "Expiration time"
-    expiredAt: String
   }
   
   """
@@ -147,12 +150,6 @@ const typeDefs = gql`
   
 `;
 
-const filterUsersByUserIds = userIds => dummyUsers.filter(user => userIds.includes(user.id));
-
-const findUserByUserId = userId => dummyUsers.find(user => user.id === Number(userId));
-
-const findUserByEmail = email => dummyUsers.find(user => user.email === email);
-
 const findPostsByUserId = userId => dummyPosts.filter(post => post.authorId === userId);
 
 const findPostByPostId = postId => dummyPosts.find(post => post.id === Number(postId));
@@ -173,26 +170,6 @@ const isPostAuthor = resolverFunc => (parent, args, context) => {
   if (!isAuthor) throw new ForbiddenError(`Only Author Can Delete Post`);
 
   return resolverFunc.apply(null, [parent, args, context]);
-};
-
-const updateUserInfo = (userId, data) => Object.assign(findUserByUserId(userId), data);
-
-const updateMyInfo = (parent, { input }, { me }) => {
-  // filter null value
-  const data = ['name', 'age'].reduce((obj, key) => (input[key] ? { ...obj, [key]: input[key] } : obj), {});
-
-  return updateUserInfo(me.id, data);
-};
-
-const addFriend = (parent, { userId }, { me }) => {
-  userId = Number(userId);
-  const user = findUserByUserId(me.id);
-  if (!user.friendIds.includes(userId)) {
-    user.friendIds.push(userId);
-  } else {
-    user.friendIds = user.friendIds.filter(_userId => _userId !== userId);
-  }
-  return user;
 };
 
 const likePost = (parent, { postId }, { me }) => {
@@ -220,46 +197,15 @@ const addPost = (parent, { input }, { me }) => {
   return dummyPosts[dummyPosts.length - 1];
 };
 
-const addUser = ({ name, email, password }) => (
-  dummyUsers[dummyUsers.length] = {
-    id: dummyUsers.length + 1,
-    name: name,
-    email: email,
-    password: password,
-    age: 0,
-    friendIds: []
-  }
-);
-
 const generateJWT = (user) => (
   jwt.sign({
     me: {
       id: user.id,
-      name: user.name
+      name: user.name,
+      email: user.email
     }
   }, SECRET, { expiresIn: EXPIRATION_TIME })
 );
-
-const signUp = async (parent, { input }) => {
-  const { email, password, name } = input;
-  const user = dummyUsers.some(user => user.email === email);
-  if (user) throw new Error(`User Email Duplicate`);
-
-  const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
-
-  return addUser({ name: name, email: email, password: hashedPassword });
-};
-
-const login = async (parent, { input }) => {
-  const { email, password } = input;
-  const user = findUserByEmail(email);
-  if (!user) throw new Error(`User Not Found`);
-
-  const match = await bcrypt.compare(password, user.password);
-  if (!match) throw new Error(`User Password Incorrect`);
-
-  return { token: await generateJWT(user), expiredAt: Date.now() + (EXPIRATION_TIME * 1000) };
-};
 
 const isAuthenticated = resolverFunc => (parent, args, context) => {
   if (!context.me) throw new ForbiddenError(`Please Login First`);
@@ -268,30 +214,49 @@ const isAuthenticated = resolverFunc => (parent, args, context) => {
 
 const resolvers = {
   Query: {
-    me: isAuthenticated((parent, args, { me }) => findUserByUserId(me.id)),
-    user: (root, args) => findUserByUserId(args.id),
-    users: () => dummyUsers,
+    me: isAuthenticated((root, args, { me, userModel }) => userModel.findUserByUserId(me.id)),
+    user: (root, args, { userModel }) => userModel.findUserByUserId(Number(args.id)),
+    users: (root, args, { userModel }) => userModel.getUsers(),
     post: (root, args) => findPostByPostId(args.id),
     posts: () => dummyPosts
   },
   Mutation: {
-    updateMyInfo: isAuthenticated((parent, args, { me }) => updateMyInfo(parent, args, { me })),
-    addFriend: isAuthenticated((parent, args, { me }) => addFriend(parent, args, { me })),
+    updateMyInfo: isAuthenticated((parent, { input }, { me, userModel }) => userModel.updateMyInfo(me, input)),
+    addFriend: isAuthenticated((parent, { userId }, { me, userModel }) => userModel.addFriend(me, Number(userId))),
     addPost: isAuthenticated((parent, args, { me }) => addPost(parent, args, { me })),
     deletePost: isAuthenticated(
-      isPostAuthor((root, { postId }, { me }) => deletePost(postId))
+      isPostAuthor((parent, { postId }, { me }) => deletePost(postId))
     ),
     likePost: isAuthenticated((parent, args, { me }) => likePost(parent, args, { me })),
-    signUp: signUp,
-    login: login
+    signUp: async (parent, { input }, { userModel }) => {
+      const { email, password, name } = input;
+      const user = userModel.findUserByEmail(email);
+      if (user) throw new Error(`User Email Duplicate`);
+
+      const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+
+      return userModel.addUser({ name, email, password: hashedPassword });
+    },
+    login: async (parent, { input }, { userModel }) => {
+      const { email, password } = input;
+      const user = userModel.findUserByEmail(email);
+
+      if (!user) throw new Error(`Account Not Found`);
+
+      const isPasswordValid = await bcrypt.compare(password, user.password);
+      if (!isPasswordValid) throw new Error(`User Password Incorrect`);
+
+      return { token: await generateJWT(user)};
+    }
   },
   User: {
-    friends: (parent) => filterUsersByUserIds(parent.friendIds),
+    friends: (parent, args, { userModel }) =>
+      userModel.filterUsersByUserIds(parent.friendIds),
     posts: (parent) => findPostsByUserId(parent.id)
   },
   Post: {
-    author: (parent) => findUserByUserId(parent.authorId),
-    likeGivers: (parent) => filterUsersByUserIds(parent.likeGivers)
+    author: (parent, args, { userModel }) => userModel.findUserByUserId(parent.authorId),
+    likeGivers: (parent, args, { userModel }) => userModel.filterUsersByUserIds(parent.likeGivers)
   }
 };
 
@@ -299,17 +264,20 @@ const server = new ApolloServer({
   typeDefs,
   resolvers,
   context: async({ req }) => {
+    const context = {
+      userModel
+    };
     const token = req.headers['x-token'];
     if (token) {
       try {
         const { me } = await jwt.verify(token, SECRET);
-        return { me };
+        return { ...context, me };
       } catch (e) {
         throw new Error(`Token Expired`);
       }
     }
 
-    return {};
+    return context;
   }
 });
 
