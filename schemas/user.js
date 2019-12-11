@@ -25,6 +25,8 @@ const typeDefs = gql`
   type Token {
     "Access token"
     token: String
+    "Expiration time"
+    expiresIn: Date
   }
   
   extend type Query {
@@ -84,7 +86,7 @@ const resolvers = {
       const isPasswordValid = await bcrypt.compare(password, user.password);
       if (!isPasswordValid) throw new Error(`User Password Incorrect`);
 
-      return { token: await generateJWT(user, secret) };
+      return await generateJWT(user, secret);
     }
   },
   User: {

@@ -6,13 +6,13 @@ const jwt = require('jsonwebtoken');
 const EXPIRATION_TIME = '1h';
 
 const generateJWT = (user, secret) => (
-  jwt.sign({
+  { token: jwt.sign({
     me: {
       id: user.id,
       name: user.name,
       email: user.email
     }
-  }, secret, { expiresIn: EXPIRATION_TIME })
+  }, secret, { expiresIn: EXPIRATION_TIME }), expiresIn: new Date() }
 );
 
 const isAuthenticated = resolverFunc => (parent, args, context) => {
