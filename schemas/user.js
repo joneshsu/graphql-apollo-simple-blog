@@ -16,7 +16,7 @@ const typeDefs = gql`
     "Name"
     name: String
     "Age"
-    age: Int
+    age: Int @deprecated (reason: "It's secret")
     "Friends"
     friends: [User]
     posts: [Post]

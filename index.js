@@ -7,7 +7,7 @@ const {
   postModel
 } = require('./models');
 
-const { typeDefs, resolvers } = require('./schemas');
+const { typeDefs, resolvers, schemaDirectives } = require('./schemas');
 
 const jwt = require('jsonwebtoken');
 
@@ -17,6 +17,7 @@ const SALT_ROUNDS = 2;
 const server = new ApolloServer({
   typeDefs,
   resolvers,
+  schemaDirectives,
   context: async({ req }) => {
     const context = {
       secret: SECRET,

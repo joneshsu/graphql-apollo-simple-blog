@@ -1,15 +1,33 @@
 'use strict';
 
-const { gql } = require('apollo-server');
-const { GraphQLScalarType } = require('graphql');
+const { gql, SchemaDirectiveVisitor } = require('apollo-server');
+const { GraphQLScalarType, defaultFieldResolver } = require('graphql');
 const { Kind } = require('graphql/language');
 
 const userSchema = require('./user');
 const postSchema = require('./post');
 
+class LowerCaseDirective extends SchemaDirectiveVisitor {
+  // override visitFieldDefinition
+  visitFieldDefinition(field, details) {
+    const { resolve = defaultFieldResolver } = field;
+    // modify the function of resolve of field
+    field.resolve = async function(...args) {
+      const result = await resolve.apply(this, args);
+      if (typeof result === 'string') {
+        return result.toLowerCase();
+      }
+
+      return result;
+    };
+  }
+}
+
 const typeDefs = gql`
+  directive @lower on FIELD_DEFINITION
+  
   type Query {
-    hello: String
+    hello: String @lower
     now: Date
   }
   
@@ -22,7 +40,7 @@ const typeDefs = gql`
 
 const resolvers = {
   Query: {
-    hello: () => 'World',
+    hello: () => 'Hello World!',
     now: () => new Date()
   },
   Mutation: {
@@ -51,5 +69,8 @@ const resolvers = {
 
 module.exports = {
   typeDefs: [typeDefs, userSchema.typeDefs, postSchema.typeDefs],
-  resolvers: [resolvers, userSchema.resolvers, postSchema.resolvers]
+  resolvers: [resolvers, userSchema.resolvers, postSchema.resolvers],
+  schemaDirectives: {
+    lower: LowerCaseDirective
+  }
 };
