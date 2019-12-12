@@ -28,6 +28,9 @@ const typeDefs = gql`
   
   type Query {
     hello: String @lower
+    getString: String
+    getInt: Int
+    getFloat: Float
     now: Date
   }
   
@@ -37,6 +40,12 @@ const typeDefs = gql`
   
   scalar Date
 `;
+
+const mocks = {
+  Int: () => 2,
+  Float: () => 3.14,
+  String: () => 'Hello'
+};
 
 const resolvers = {
   Query: {
@@ -72,5 +81,6 @@ module.exports = {
   resolvers: [resolvers, userSchema.resolvers, postSchema.resolvers],
   schemaDirectives: {
     lower: LowerCaseDirective
-  }
+  },
+  mocks
 };

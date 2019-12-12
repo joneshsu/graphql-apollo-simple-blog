@@ -61,7 +61,7 @@ const typeDefs = gql`
 
 const resolvers = {
   Query: {
-    user: (root, args, { userModel }) => userModel.findUserByUserId(Number(args.id)),
+    user: (root, args, { userModel, dataLoaders }) => userModel.findUserByUserId(Number(args.id)),
     users: (root, args, { userModel }) => userModel.getUsers(),
     me: isAuthenticated((root, args, { me, userModel }) => userModel.findUserByUserId(me.id)),
   },
@@ -90,8 +90,9 @@ const resolvers = {
     }
   },
   User: {
-    friends: (parent, args, { userModel }) =>
-      userModel.filterUsersByUserIds(parent.friendIds),
+    friends: async (parent, args, { userModel, dataLoaders }) => {
+      return dataLoaders.users.loadMany(parent.friendIds);
+    },
     posts: (parent, args, { postModel }) =>
       postModel.findPostsByUserId(parent.id)
   }

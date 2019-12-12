@@ -30,13 +30,23 @@ const dummyUsers = [
   }
 ];
 
+const genPromise = (value, text) => {
+  return new Promise(resolve => {
+    setTimeout(() => {
+      console.log(text);
+      return resolve(value);
+    }, 100);
+  });
+};
+
 const getUsers = () => dummyUsers;
 
 const findUserByUserId = userId => dummyUsers.find(user => user.id === userId);
 
 const findUserByEmail = email => dummyUsers.find(user => user.email === email);
 
-const filterUsersByUserIds = userIds => dummyUsers.filter(user => userIds.includes(user.id));
+// simulate database latency
+const filterUsersByUserIds = userIds => genPromise(dummyUsers.filter(user => userIds.includes(user.id)), `getUsersByIds: ${userIds}`);
 
 const addFriend = (me, userId) => {
   const user = findUserByUserId(me.id);
