@@ -1,10 +1,30 @@
 'use strict';
 
-const { gql, ForbiddenError } = require('apollo-server');
+const { gql, ForbiddenError, UserInputError } = require('apollo-server');
 
 const { isAuthenticated } = require('./helps');
 
 const typeDefs = gql`
+  type PostConnection {
+    "Data"
+    edges: [PostEdge!]!
+    "Pagination information"
+    pageInfo: PostInfo!
+  }
+  
+  type PostEdge {
+    "An identity with base64"
+    cursor: String
+    "Actual Post data"
+    node: Post!
+  }
+  
+  type PostInfo {
+    hasNextPage: Boolean!
+    hasPreviousPage: Boolean!
+    totalPageCount: Int
+  }
+
   type Post {
     "Identity"
     id: ID!
@@ -20,7 +40,12 @@ const typeDefs = gql`
   }
   
   extend type Query {
-    posts: [Post]
+    posts(
+      first: Int
+      after: String
+      last: Int
+      before: String
+    ): PostConnection! 
     post(id: ID!): Post
   } 
   
@@ -51,7 +76,41 @@ const isPostAuthor = resolverFunc => (parent, args, context) => {
 const resolvers = {
   Query: {
     post: (root, args, { postModel }) => postModel.findPostByPostId(Number(args.id)),
-    posts: (root, args, { postModel }) => postModel.getPosts()
+    posts: (root, { first, after, last, before }, { postModel }) => {
+      if (!first && after) throw new UserInputError(`after must be with first`);
+
+      if ((last && !before) || (!last && before)) throw new UserInputError(`last and before must be used together`);
+
+      if (first && after && last && before) throw new UserInputError(`Incorrect Arguments Usage.`);
+
+      let posts, countWithoutLimit;
+
+      if (first) {
+        [ posts, countWithoutLimit ] = postModel.getPaginationPostsAfterCreationTime
+          ((after ? Buffer.from(after, 'base64').toString() : null), first
+        );
+      }
+
+      if (last) {
+        [ posts, countWithoutLimit ] = postModel.getPaginationPostsBeforeCreationTime(
+          Buffer.from(before, 'base64').toString(), last
+        );
+      }
+
+      const allCount = postModel.getPostsCount();
+
+
+      return {
+        edges: posts.map(post => ({
+          cursor: Buffer.from(post.createdAt).toString('base64'),
+          node: post,
+        })),
+        pageInfo: {
+          hasNextPage: first ? countWithoutLimit > first : allCount > countWithoutLimit,
+          hasPreviousPage: last ? countWithoutLimit > last : allCount > countWithoutLimit
+        }
+      };
+    }
   },
   Mutation: {
     addPost: isAuthenticated((parent, { input }, { me, postModel }) => postModel.addPost(me, input)),

@@ -19,6 +19,31 @@ const dummyPosts = [
   }
 ];
 
+const getPaginationPostsAfterCreationTime = (creationTime, limit) => {
+  const posts = creationTime ? dummyPosts.filter(post =>
+    new Date(post.createdAt) > new Date(creationTime)
+  ).sort(
+    (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
+  ) : dummyPosts.sort(
+    (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
+  );
+
+  return [ posts.slice(0, limit), posts.length ];
+};
+
+const getPaginationPostsBeforeCreationTime = (creationTime, limit) => {
+  const posts = dummyPosts.filter(post =>
+    new Date(post.createdAt) < new Date(creationTime)
+  ).sort(
+    (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
+  );
+
+  return [ posts.slice(-1 * limit), posts.length ];
+};
+
+
+const getPostsCount = () => dummyPosts.length;
+
 const getPosts = () => dummyPosts;
 
 const findPostsByUserId = userId => dummyPosts.filter(post => post.authorId === userId);
@@ -61,5 +86,8 @@ module.exports = {
   addPost,
   likePost,
   deletePost,
-  getPosts
+  getPosts,
+  getPaginationPostsAfterCreationTime,
+  getPaginationPostsBeforeCreationTime,
+  getPostsCount
 };
